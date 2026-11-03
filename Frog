@@ -111,9 +111,14 @@
             <!-- Start / Result Overlay -->
             <div id="overlay" class="absolute inset-0 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center z-40 p-6 text-center">
                 <h2 id="overlay-title" class="text-3xl font-extrabold text-emerald-400 mb-2 drop-shadow">Grounded Frog</h2>
-                <p id="overlay-desc" class="text-xs text-slate-200 mb-6 leading-relaxed">
+                <p id="overlay-desc" class="text-xs text-slate-200 mb-4 leading-relaxed">
                     강(파란색 구역) 위에 있는 입체 연잎 10개 위에 차례대로 올라타 건너세요!<br>점프했을 때 연잎이 없으면 물에 풍덩 빠집니다.
                 </p>
+                <!-- Record Stats Display -->
+                <div id="stats-box" class="hidden bg-slate-900/90 border border-emerald-500/40 rounded-xl px-4 py-2.5 mb-4 text-xs text-emerald-200 shadow-inner w-64 flex flex-col gap-1">
+                    <div class="flex justify-between"><span>이번 기록:</span> <span id="current-time-text" class="font-bold text-white">0.00초</span></div>
+                    <div class="flex justify-between"><span>최고 기록:</span> <span id="best-time-text" class="font-bold text-yellow-300">없음</span></div>
+                </div>
                 <button id="action-btn" onclick="startGame()" class="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-slate-950 font-extrabold px-8 py-3.5 rounded-xl shadow-xl transition cursor-pointer text-base">
                     게임 시작
                 </button>
@@ -148,10 +153,18 @@
         let padsData = [];
         let gameInterval = null;
 
+        // Timer & Best Score Variables
+        let startTime = 0;
+        let elapsedTime = 0;
+        let bestTime = localStorage.getItem('grounded_frog_best') ? parseFloat(localStorage.getItem('grounded_frog_best')) : null;
+
         const frog = document.getElementById('frog');
         const overlay = document.getElementById('overlay');
         const overlayTitle = document.getElementById('overlay-title');
         const overlayDesc = document.getElementById('overlay-desc');
+        const statsBox = document.getElementById('stats-box');
+        const currentTimeText = document.getElementById('current-time-text');
+        const bestTimeText = document.getElementById('best-time-text');
         const actionBtn = document.getElementById('action-btn');
         const targetCounter = document.getElementById('target-counter');
         const gameStatus = document.getElementById('game-status');
@@ -216,7 +229,9 @@
         function startGame() {
             isPlaying = true;
             currentPadIndex = 0;
+            startTime = Date.now();
             overlay.classList.add('hidden');
+            statsBox.classList.add('hidden');
             gameStatus.innerText = "진행 중";
             initPads();
             updateFrogPosition();
@@ -227,6 +242,8 @@
 
         function updateGameLoop() {
             if (!isPlaying) return;
+
+            elapsedTime = (Date.now() - startTime) / 1000;
 
             for (let i = 0; i < TOTAL_PADS; i++) {
                 let p = padsData[i];
@@ -365,16 +382,36 @@
             isPlaying = false;
             clearInterval(gameInterval);
 
+            const finalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+            statsBox.classList.remove('hidden');
+            currentTimeText.innerText = `${finalTime}초`;
+
             overlay.classList.remove('hidden');
             if (isSuccess) {
                 overlayTitle.innerText = "성공 (SUCCESS)! 🎉";
                 overlayTitle.className = "text-3xl font-extrabold text-emerald-400 mb-2 drop-shadow";
-                overlayDesc.innerText = "강 건너기 성공! 친구와 성공 여부를 공유하세요.";
+                
+                // Check best record
+                const numTime = parseFloat(finalTime);
+                if (bestTime === null || numTime < bestTime) {
+                    bestTime = numTime;
+                    localStorage.setItem('grounded_frog_best', bestTime);
+                    overlayDesc.innerText = `축하합니다! ${finalTime}초 만에 강 건너기 성공! (신기록 달성!)`;
+                } else {
+                    overlayDesc.innerText = `성공! ${finalTime}초 만에 강을 건너셨습니다!`;
+                }
+
+                bestTimeText.innerText = `${bestTime.toFixed(2)}초`;
                 gameStatus.innerText = "성공";
             } else {
                 overlayTitle.innerText = "실패 (FAIL)! 💦";
                 overlayTitle.className = "text-3xl font-extrabold text-rose-400 mb-2 drop-shadow";
                 overlayDesc.innerText = message + "\n다시 도전해보세요!";
+                if (bestTime !== null) {
+                    bestTimeText.innerText = `${bestTime.toFixed(2)}초`;
+                } else {
+                    bestTimeText.innerText = "없음";
+                }
                 gameStatus.innerText = "실패";
             }
             actionBtn.innerText = "다시 하기";
