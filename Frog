@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grounded Frog</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        body {
+            font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+            touch-action: manipulation;
+        }
+        @keyframes boingJump {
+            0% { transform: scale(1, 1) translateY(0); }
+            30% { transform: scale(0.65, 1.45) translateY(-22px); }
+            60% { transform: scale(1.25, 0.75) translateY(-8px); }
+            100% { transform: scale(1, 1) translateY(0); }
+        }
+        @keyframes waterSplashSink {
+            0% { transform: scale(1, 1) translateY(0) rotate(0deg); opacity: 1; filter: brightness(1); }
+            40% { transform: scale(1.3, 0.7) translateY(8px) rotate(8deg); opacity: 0.9; filter: brightness(0.85); }
+            100% { transform: scale(0.3, 0.3) translateY(32px) rotate(30deg); opacity: 0.6; filter: brightness(0.6); }
+        }
+        @keyframes splashDroplets {
+            0% { transform: scale(0.3); opacity: 1; }
+            100% { transform: scale(2.0) translateY(-30px); opacity: 0; }
+        }
+        @keyframes waveMove {
+            0% { background-position: 0 0; }
+            100% { background-position: 40px 40px; }
+        }
+        .boing-anim {
+            animation: boingJump 0.32s ease-in-out;
+        }
+        .splash-sink-anim {
+            animation: waterSplashSink 0.55s ease-in forwards;
+        }
+        .vector-river {
+            background: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 50%, #0284c7 100%);
+            box-shadow: inset 0 0 25px rgba(255, 255, 255, 0.4);
+        }
+        /* Custom 3D Lotus Leaf Styling matching user reference image */
+        .lotus-leaf {
+            background: radial-gradient(circle at 50% 40%, #86efac 0%, #4ade80 60%, #22c55e 100%);
+            border-radius: 50% 50% 48% 48% / 55% 55% 45% 45%;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.25), inset 0 4px 6px rgba(255, 255, 255, 0.5), inset 0 -6px 10px rgba(21, 128, 61, 0.4);
+            position: absolute;
+        }
+        .lotus-notch {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 14px;
+            height: 14px;
+            background: #0284c7;
+            clip-path: polygon(50% 100%, 0 0, 100% 0);
+        }
+        .lotus-ribs {
+            position: absolute;
+            inset: 6px;
+            border-radius: 50%;
+            background: repeating-conic-gradient(from 0deg, rgba(21, 128, 61, 0.25) 0deg 12deg, transparent 12deg 36deg);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-white flex flex-col items-center justify-center min-h-screen m-0 select-none">
+
+    <div class="text-center mb-3">
+        <h1 class="text-3xl font-extrabold tracking-wider text-emerald-400 mb-1 drop-shadow">Grounded Frog</h1>
+        <p class="text-xs text-slate-300">스페이스바 또는 위쪽 화살표(↑)를 눌러 연잎 위에 타고 강을 건너세요! (총 10개)</p>
+    </div>
+
+    <!-- Game Container (Width 720px) -->
+    <div id="game-container" class="relative w-[720px] h-[540px] vector-river border-4 border-cyan-400/80 rounded-2xl overflow-hidden shadow-2xl flex flex-col justify-between">
+        
+        <!-- River Header / Info -->
+        <div class="bg-sky-900/70 backdrop-blur px-4 py-2 flex justify-between items-center text-xs border-b border-cyan-300/30 z-20">
+            <span id="target-counter" class="font-bold text-emerald-300 text-sm">연잎: 0 / 10</span>
+            <span id="game-status" class="text-cyan-100 font-medium">대기 중</span>
+        </div>
+
+        <!-- River Viewport -->
+        <div id="viewport" class="relative flex-1 overflow-hidden flex flex-col justify-between">
+            
+            <!-- Animated Reference Vector River Waves -->
+            <div class="absolute inset-0 opacity-40 pointer-events-none" style="background-image: url('data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'120\' height=\'120\' viewBox=\'0 0 120 120\'><path d=\'M10 20 Q 30 5, 50 20 T 90 20\' fill=\'none\' stroke=\'white\' stroke-width=\'3\' stroke-linecap=\'round\' opacity=\'0.7\'/><path d=\'M30 80 Q 50 65, 70 80 T 110 80\' fill=\'none\' stroke=\'white\' stroke-width=\'3\' stroke-linecap=\'round\' opacity=\'0.5\'/></svg>'); background-repeat: repeat; animation: waveMove 6s linear infinite;"></div>
+
+            <!-- Target River Bank (Top - 갈색 땅, 글자 제거) -->
+            <div class="absolute top-0 left-0 w-full h-16 bg-gradient-to-r from-amber-900 to-yellow-950 border-b-2 border-amber-700 shadow-md z-25">
+            </div>
+
+            <!-- Lily Pads Track (Strictly inside river water area) -->
+            <div id="pads-area" class="absolute inset-0 pointer-events-none z-30">
+            </div>
+
+            <!-- Water splash particles container -->
+            <div id="splash-container" class="absolute inset-0 pointer-events-none z-35 overflow-hidden"></div>
+
+            <!-- Frog Element sitting right on top of the lily pad surface -->
+            <div id="frog" class="absolute w-16 h-16 flex items-center justify-center text-4xl transition-transform duration-75 z-40 filter drop-shadow-md" style="bottom: 20px; left: calc(50% - 32px);">
+                🐸
+            </div>
+
+            <!-- Feedback Heart -->
+            <div id="heart-feedback" class="absolute hidden text-xl z-50 animate-bounce">
+                ❤️
+            </div>
+
+            <!-- Start / Result Overlay -->
+            <div id="overlay" class="absolute inset-0 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center z-40 p-6 text-center">
+                <h2 id="overlay-title" class="text-3xl font-extrabold text-emerald-400 mb-2 drop-shadow">Grounded Frog</h2>
+                <p id="overlay-desc" class="text-xs text-slate-200 mb-6 leading-relaxed">
+                    강(파란색 구역) 위에 있는 입체 연잎 10개 위에 차례대로 올라타 건너세요!<br>점프했을 때 연잎이 없으면 물에 풍덩 빠집니다.
+                </p>
+                <button id="action-btn" onclick="startGame()" class="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-slate-950 font-extrabold px-8 py-3.5 rounded-xl shadow-xl transition cursor-pointer text-base">
+                    게임 시작
+                </button>
+            </div>
+
+            <!-- Starting River Bank (Bottom - 갈색 땅, 글자 제거) -->
+            <div class="absolute bottom-0 left-0 w-full h-16 bg-gradient-to-r from-amber-900 to-yellow-950 border-t-2 border-amber-700 shadow-md z-25">
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4 text-center">
+        <button onclick="triggerJump()" class="bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 active:scale-95 text-white font-extrabold py-3.5 px-10 rounded-full shadow-lg text-lg cursor-pointer transition border border-emerald-400/40">
+            JUMP! ⬆️ (스페이스바)
+        </button>
+    </div>
+
+    <style>
+        @keyframes lilyFloat {
+            0%, 100% { transform: scale(1) rotate(0deg); filter: brightness(1); }
+            50% { transform: scale(1.04) rotate(1.2deg); filter: brightness(1.06); }
+        }
+        .animated-lily {
+            animation: lilyFloat 2.4s ease-in-out infinite;
+        }
+    </style>
+
+    <script>
+        const TOTAL_PADS = 10;
+        let currentPadIndex = 0;
+        let isPlaying = false;
+        let padsData = [];
+        let gameInterval = null;
+
+        const frog = document.getElementById('frog');
+        const overlay = document.getElementById('overlay');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlayDesc = document.getElementById('overlay-desc');
+        const actionBtn = document.getElementById('action-btn');
+        const targetCounter = document.getElementById('target-counter');
+        const gameStatus = document.getElementById('game-status');
+        const padsArea = document.getElementById('pads-area');
+        const heartFeedback = document.getElementById('heart-feedback');
+        const splashContainer = document.getElementById('splash-container');
+
+        const containerWidth = 720;
+        const containerHeight = 540;
+        const padWidth = 110;
+        const padHeight = 44;
+        const frogSize = 64;
+
+        // River water boundary strictly inside the blue area (Between Top bank Y=64 and Bottom bank Y=476)
+        const riverTopY = 76;
+        const riverBottomY = 458;
+        const usableRiverHeight = riverBottomY - riverTopY - padHeight;
+
+        function initPads() {
+            padsArea.innerHTML = '';
+            splashContainer.innerHTML = '';
+            padsData = [];
+
+            for (let i = 0; i < TOTAL_PADS; i++) {
+                const pad = document.createElement('div');
+                pad.className = 'absolute w-[110px] h-[44px] lotus-leaf shadow-xl flex items-center justify-center animated-lily pointer-events-auto';
+                pad.style.animationDelay = `${(i * 0.25)}s`;
+                
+                pad.innerHTML = `
+                    <div class="lotus-notch"></div>
+                    <div class="lotus-ribs"></div>
+                `;
+                
+                // Position each lily pad strictly inside the blue river area (from bottom bank upwards to top bank)
+                const posY = (riverBottomY - padHeight - 8) - (i * (usableRiverHeight / (TOTAL_PADS - 1)));
+                pad.style.top = `${posY}px`;
+
+                padsArea.appendChild(pad);
+
+                const minX = 30;
+                const maxX = containerWidth - padWidth - 30;
+                const initialX = Math.random() * (maxX - minX) + minX;
+
+                // 속도를 더욱 빠르게 상향 (기본속도 및 3, 7, 9번 특화속도 대폭 증가)
+                let speedMultiplier = 3.2 + (i * 0.12);
+                if (i === 2 || i === 6 || i === 8) {
+                    speedMultiplier = 5.8 + (i * 0.18);
+                }
+
+                padsData.push({
+                    x: initialX,
+                    y: posY,
+                    minX: minX,
+                    maxX: maxX,
+                    direction: i % 2 === 0 ? 1 : -1,
+                    speed: speedMultiplier,
+                    element: pad
+                });
+            }
+        }
+
+        function startGame() {
+            isPlaying = true;
+            currentPadIndex = 0;
+            overlay.classList.add('hidden');
+            gameStatus.innerText = "진행 중";
+            initPads();
+            updateFrogPosition();
+
+            if (gameInterval) clearInterval(gameInterval);
+            gameInterval = setInterval(updateGameLoop, 20);
+        }
+
+        function updateGameLoop() {
+            if (!isPlaying) return;
+
+            for (let i = 0; i < TOTAL_PADS; i++) {
+                let p = padsData[i];
+                p.x += p.direction * p.speed;
+
+                if (p.x <= p.minX) {
+                    p.x = p.minX;
+                    p.direction = 1;
+                } else if (p.x >= p.maxX) {
+                    p.x = p.maxX;
+                    p.direction = -1;
+                }
+
+                p.element.style.left = `${p.x}px`;
+                p.element.style.top = `${p.y}px`;
+            }
+
+            if (currentPadIndex > 0 && currentPadIndex <= TOTAL_PADS) {
+                const currentPad = padsData[currentPadIndex - 1];
+                const frogX = currentPad.x + (padWidth / 2) - (frogSize / 2);
+                const topPos = currentPad.y - 36;
+                frog.style.left = `${frogX}px`;
+                frog.style.top = `${topPos}px`;
+                frog.style.bottom = 'auto';
+            }
+        }
+
+        function triggerJump() {
+            if (!isPlaying) return;
+
+            frog.classList.remove('boing-anim', 'splash-sink-anim');
+            void frog.offsetWidth;
+            frog.classList.add('boing-anim');
+
+            let currentFrogXCenter;
+            if (currentPadIndex === 0) {
+                currentFrogXCenter = containerWidth / 2;
+            } else {
+                const prevPad = padsData[currentPadIndex - 1];
+                currentFrogXCenter = prevPad.x + (padWidth / 2);
+            }
+
+            const targetIndex = currentPadIndex;
+            if (targetIndex >= TOTAL_PADS) return;
+
+            const targetPad = padsData[targetIndex];
+
+            const targetFrogLeft = currentFrogXCenter - (frogSize / 2);
+            const targetTopPos = targetPad.y - 36;
+            frog.style.left = `${targetFrogLeft}px`;
+            frog.style.top = `${targetTopPos}px`;
+            frog.style.bottom = 'auto';
+
+            const padLeft = targetPad.x;
+            const padRight = targetPad.x + padWidth;
+
+            if (currentFrogXCenter >= padLeft - 12 && currentFrogXCenter <= padRight + 12) {
+                currentPadIndex++;
+                targetCounter.innerText = `연잎: ${currentPadIndex} / ${TOTAL_PADS}`;
+                showHeartFeedback(targetPad);
+
+                setTimeout(() => {
+                    if (!isPlaying) return;
+                    updateFrogPosition();
+                    if (currentPadIndex >= TOTAL_PADS) {
+                        endGame(true, "성공");
+                    }
+                }, 150);
+            } else {
+                isPlaying = false;
+                if (gameInterval) clearInterval(gameInterval);
+
+                frog.classList.remove('boing-anim');
+                void frog.offsetWidth;
+                frog.classList.add('splash-sink-anim');
+
+                createWaterSplashEffect(currentFrogXCenter, targetPad.y);
+
+                setTimeout(() => {
+                    endGame(false, "점프한 자리에 연잎이 없어 물에 빠졌습니다!");
+                }, 550);
+            }
+        }
+
+        function createWaterSplashEffect(x, y) {
+            splashContainer.innerHTML = '';
+
+            for (let i = 0; i < 4; i++) {
+                const ring = document.createElement('div');
+                ring.className = 'absolute border-2 border-white rounded-full opacity-80';
+                ring.style.left = `${x - 20}px`;
+                ring.style.top = `${y + 10}px`;
+                ring.style.width = `40px`;
+                ring.style.height = `20px`;
+                ring.style.animation = `splashDroplets 0.55s ease-out ${i * 0.08}s forwards`;
+                splashContainer.appendChild(ring);
+            }
+
+            for (let j = 0; j < 6; j++) {
+                const drop = document.createElement('div');
+                drop.className = 'absolute w-2.5 h-2.5 bg-cyan-100 rounded-full shadow';
+                const angle = (j / 6) * Math.PI;
+                const offsetX = Math.cos(angle) * 38;
+                const offsetY = Math.sin(angle) * 22;
+                drop.style.left = `${x + offsetX}px`;
+                drop.style.top = `${y + 15 + offsetY}px`;
+                drop.style.animation = `splashDroplets 0.5s ease-out 0.04s forwards`;
+                splashContainer.appendChild(drop);
+            }
+        }
+
+        function updateFrogPosition() {
+            frog.classList.remove('splash-sink-anim');
+            if (currentPadIndex === 0) {
+                frog.style.top = 'auto';
+                frog.style.bottom = '20px';
+                frog.style.left = `${containerWidth / 2 - (frogSize / 2)}px`;
+            } else if (currentPadIndex <= TOTAL_PADS) {
+                const pad = padsData[currentPadIndex - 1];
+                frog.style.bottom = 'auto';
+                frog.style.top = `${pad.y - 36}px`;
+                frog.style.left = `${pad.x + (padWidth / 2) - (frogSize / 2)}px`;
+            }
+        }
+
+        function showHeartFeedback(pad) {
+            heartFeedback.style.left = `${pad.x + 36}px`;
+            heartFeedback.style.top = `${pad.y - 30}px`;
+            heartFeedback.classList.remove('hidden');
+            setTimeout(() => {
+                heartFeedback.classList.add('hidden');
+            }, 350);
+        }
+
+        function endGame(isSuccess, message) {
+            isPlaying = false;
+            clearInterval(gameInterval);
+
+            overlay.classList.remove('hidden');
+            if (isSuccess) {
+                overlayTitle.innerText = "성공 (SUCCESS)! 🎉";
+                overlayTitle.className = "text-3xl font-extrabold text-emerald-400 mb-2 drop-shadow";
+                overlayDesc.innerText = "강 건너기 성공! 친구와 성공 여부를 공유하세요.";
+                gameStatus.innerText = "성공";
+            } else {
+                overlayTitle.innerText = "실패 (FAIL)! 💦";
+                overlayTitle.className = "text-3xl font-extrabold text-rose-400 mb-2 drop-shadow";
+                overlayDesc.innerText = message + "\n다시 도전해보세요!";
+                gameStatus.innerText = "실패";
+            }
+            actionBtn.innerText = "다시 하기";
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'ArrowUp' || e.key === ' ' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                triggerJump();
+            }
+        });
+    </script>
+</body>
+</html>
